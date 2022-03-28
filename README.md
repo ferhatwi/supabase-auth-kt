@@ -3,7 +3,7 @@
 ### With BOM
 ```groovy  
 dependencies {  
- implementation platform("io.github.ferhatwi:supabase-kt-bom:0.1.0")
+ implementation platform("io.github.ferhatwi:supabase-kt-bom:0.1.3")
  implementation "io.github.ferhatwi:supabase-auth-kt"
 }  
 ```  
@@ -11,7 +11,7 @@ dependencies {
 #### NOTICE: BOM is strongly recommended to prevent conflicts.
 ```groovy 
 dependencies {  
- implementation "io.github.ferhatwi:supabase-auth-kt:0.1.0"
+ implementation "io.github.ferhatwi:supabase-auth-kt:0.1.1"
 }  
 ```  
 ## How to use?
@@ -23,55 +23,39 @@ val auth = Supabase.auth()
 ```  
 #### Sign Up With Email
 ```kotlin
-auth.signUpWithEmail(
-            "SOME@EMAIL.com",
-            "PASSWORD",
-            onFailure = {
+auth.signUpWithEmail("SOME@EMAIL.com", "PASSWORD")
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Sign In With Email
 ```kotlin
-auth.signInWithEmail(
-            "SOME@EMAIL.com",
-            "PASSWORD",
-            onFailure = {
+auth.signInWithEmail("SOME@EMAIL.com", "PASSWORD")
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Sign Up With Phone
 ```kotlin
-auth.signUpWithPhone(
-            "PHONE_NUMBER",
-            "PASSWORD",
-            onFailure = {
+auth.signUpWithPhone("PHONE_NUMBER", "PASSWORD")
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Sign In With Phone
 ```kotlin
-auth.signInWithPhone(
-            "PHONE_NUMBER",
-            "PASSWORD",
-            onFailure = {
+auth.signInWithPhone("PHONE_NUMBER", "PASSWORD")
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Sign In With Third Part Provider
 ```kotlin
@@ -79,97 +63,75 @@ auth.signInWithThirdPartyProvider(
             "ID_TOKEN",
             "UNENCRYPTED_NONCE",
             "CLIENT_KEY",
-            PROVIDER,
-            onFailure = {
+            PROVIDER)
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Send Magic Link Email
 ```kotlin
-auth.sendMagicLinkEmail(
-            "SOME@EMAIL.com",
-            onFailure = {
+auth.sendMagicLinkEmail("SOME@EMAIL.com")
+    .catch {
 
-            },
-            onSuccess = {
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Send Mobile OTP
 ```kotlin
-auth.sendMobileOTP(
-            "PHONE_NUMBER",
-            onFailure = {
+auth.sendMobileOTP("PHONE_NUMBER")
+    .catch {
 
-            },
-            onSuccess = {
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Sign Out
 ```kotlin
-auth.signOut(
-            onFailure = {
+auth.signOut()
+    .catch {
 
-            },
-            onSuccess = {
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Verify Mobile OTP
 ```kotlin
-auth.verifyMobileOTP(
-            "PHONE_NUMBER",
-            "TOKEN",
-            onFailure = {
+auth.verifyMobileOTP("PHONE_NUMBER", "TOKEN")
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Reset Password for Email
 ```kotlin
-auth.resetPasswordForEmail(
-            "SOME@EMAIL.com",
-            onFailure = {
+auth.resetPasswordForEmail("SOME@EMAIL.com")
+    .catch {
 
-            },
-            onSuccess = {
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Refresh Access Token
 ```kotlin
-auth.refreshAccessToken(
-            "REFRESH_TOKEN",
-            onFailure = {
+auth.refreshAccessToken("REFRESH_TOKEN")
+    .catch {
 
-            },
-            onSuccess = {
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Get User
 ```kotlin
-auth.getUser(
-            onFailure = {
+auth.getUser()
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Update User
 ```kotlin
@@ -177,15 +139,13 @@ auth.updateUser(
             "SOME@EMAIL.com",
             "PHONE_NUMBER",
             "PASSWORD",
-            "EMAIL_CHANGE_TOKEN"
-            DATA
-            onFailure = {
+            "EMAIL_CHANGE_TOKEN",
+            DATA)
+    .catch {
 
-            },
-            onSuccess = { session, user ->
+    }.collect {
 
-            }
-        )
+    }
 ```
 #### Listen Auth State Changes
 ```kotlin
