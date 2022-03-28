@@ -3,11 +3,13 @@ package io.github.ferhatwi.supabase.auth
 import io.github.ferhatwi.supabase.Supabase
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.flow.flow
 import kotlin.collections.set
 
 object AuthState {
     internal var onAuthStateChanged: OnAuthStateChanged? = null
 }
+
 class SupabaseAuth {
 
     companion object {
@@ -19,10 +21,8 @@ class SupabaseAuth {
         password: String,
         redirectTo: String? = null,
         data: Map<String, Any?>? = null,
-        captchaToken: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session?, user: User) -> Unit
-    ) {
+        captchaToken: String? = null
+    ) = flow {
         val url =
             "${authURL()}/signup${if (redirectTo != null) "?${redirectTo.encodeURLPath()}" else ""}"
 
@@ -37,62 +37,53 @@ class SupabaseAuth {
             map["gotrue_meta_security"] = mapOf("captcha_token" to captchaToken)
         }
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = if (result.contains("access_token")) Session(result) else null
-            val user = User(result["user"] as Map<String, Any?>)
+        }, onSuccess = {
+            val session = if (it.contains("access_token")) Session(it) else null
+            val user = User(it["user"] as Map<String, Any?>)
 
             if (session != null) {
                 Supabase.setAuth(session.access_token)
                 AuthState.onAuthStateChanged?.onSignIn(user)
             }
-            onSuccess(
-                session,
-                user
-            )
-        }, onFailure)
 
+            emit(Pair(session, user))
+        })
     }
 
     suspend fun signInWithEmail(
         email: String,
         password: String,
-        redirectTo: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+        redirectTo: String? = null
+    ) = flow {
         val url =
             "${authURL()}/token?grant_type=password${if (redirectTo != null) "&${redirectTo.encodeURLPath()}" else ""}"
 
         val map = mapOf("email" to email, "password" to password)
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = Session(result)
-            val user = User(result["user"] as Map<String, Any?>)
-
+        }, onSuccess = {
+            val session = Session(it)
+            val user = User(it["user"] as Map<String, Any?>)
             Supabase.setAuth(session.access_token)
             AuthState.onAuthStateChanged?.onSignIn(user)
-            onSuccess(
-                session,
-                user
-            )
-        }, onFailure)
-    }
 
+            emit(Pair(session, user))
+        })
+    }
 
     suspend fun signUpWithPhone(
         phone: String,
         password: String,
         data: Map<String, Any?>? = null,
-        captchaToken: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session?, user: User) -> Unit
-    ) {
+        captchaToken: String? = null
+    ) = flow {
         val url = "${authURL()}/signup"
 
         val map = hashMapOf<String, Any?>(
@@ -106,98 +97,83 @@ class SupabaseAuth {
             map["gotrue_meta_security"] = mapOf("captcha_token" to captchaToken)
         }
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = if (result.contains("access_token")) Session(result) else null
-            val user = User(result["user"] as Map<String, Any?>)
+        }, onSuccess = {
+            val session = if (it.contains("access_token")) Session(it) else null
+            val user = User(it["user"] as Map<String, Any?>)
 
             if (session != null) {
                 Supabase.setAuth(session.access_token)
                 AuthState.onAuthStateChanged?.onSignIn(user)
             }
-            onSuccess(
-                session,
-                user
-            )
-        }, onFailure)
+
+            emit(Pair(session, user))
+        })
     }
 
     suspend fun signInWithPhone(
         phone: String,
         password: String,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+    ) = flow {
         val url = "${authURL()}/token?grant_type=password"
-
         val map = mapOf("phone" to phone, "password" to password)
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = Session(result)
-            val user = User(result["user"] as Map<String, Any?>)
-
+        }, onSuccess = {
+            val session = Session(it)
+            val user = User(it["user"] as Map<String, Any?>)
             Supabase.setAuth(session.access_token)
             AuthState.onAuthStateChanged?.onSignIn(user)
-            onSuccess(
-                session,
-                user
-            )
-        }, onFailure)
-    }
 
-    /**
-     * [generateNonce] function's result;
-     * "nonce: String" can be used here as "nonce" argument,
-     * "encryptedNonce: String" can be used to set nonce to OpenID connect.
-     *
-     */
+            emit(Pair(session, user))
+        })
+    }
 
     suspend fun signInWithThirdPartyProvider(
         idToken: String,
-        nonce: String,
+        unencryptedNonce: String,
         clientKey: String,
-        provider: Provider,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+        provider: Provider
+    ) = flow {
         val url = "${authURL()}/token?grant_type=id_token"
 
         val map = mapOf(
             "id_token" to idToken,
-            "nonce" to nonce,
+            "nonce" to unencryptedNonce,
             "client_id" to clientKey,
             "provider" to provider.toString()
         )
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = Session(result)
-            val user = User(result["user"] as Map<String, Any?>)
+        }, onSuccess = {
+            val session = if (it.contains("access_token")) Session(it) else null
+            val user = User(it["user"] as Map<String, Any?>)
 
-            Supabase.setAuth(session.access_token)
-            AuthState.onAuthStateChanged?.onSignIn(user)
-            onSuccess(
-                session,
-                user
-            )
-        }, onFailure)
+            if (session != null) {
+                Supabase.setAuth(session.access_token)
+                AuthState.onAuthStateChanged?.onSignIn(user)
+            }
+
+            emit(Pair(session, user))
+        })
     }
 
     suspend fun sendMagicLinkEmail(
         email: String,
         shouldCreateUser: Boolean = true,
         redirectTo: String? = null,
-        captchaToken: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: () -> Unit
-    ) {
+        captchaToken: String? = null
+    ) = flow {
         val url =
             "${authURL()}/otp${if (redirectTo != null) "?${redirectTo.encodeURLPath()}" else ""}"
 
@@ -207,22 +183,20 @@ class SupabaseAuth {
             "gotrue_meta_security" to mapOf("hcaptcha_token" to captchaToken)
         )
 
-        runCatching({
-            getClient().request<HttpResponse>(url, HttpMethod.Post, map) {
+        runCatching<HttpResponse>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            onSuccess()
-        }, onFailure)
-
+        }, onSuccess = {
+            emit(SupabaseAuthSuccess)
+        })
     }
 
     suspend fun sendMobileOTP(
         phone: String,
         shouldCreateUser: Boolean = true,
-        captchaToken: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: () -> Unit
-    ) {
+        captchaToken: String? = null
+    ) = flow {
         val url = "${authURL()}/otp"
 
         val map = mapOf(
@@ -231,41 +205,34 @@ class SupabaseAuth {
             "gotrue_meta_security" to mapOf("hcaptcha_token" to captchaToken)
         )
 
-        runCatching({
-            getClient().request<HttpResponse>(url, HttpMethod.Post, map) {
+        runCatching<HttpResponse>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            onSuccess()
-        }, onFailure)
+        }, onSuccess = {
+            emit(SupabaseAuthSuccess)
+        })
     }
 
-
-    suspend fun signOut(
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: () -> Unit
-    ) {
-
+    suspend fun signOut() = flow {
         val url = "${authURL()}/logout"
 
-        runCatching({
-            getClient().request<HttpResponse>(url, HttpMethod.Post, mapOf<String, Any?>()) {
+        runCatching<HttpResponse>({
+            getClient().request(url, HttpMethod.Post, mapOf<String, Any?>()) {
                 applicationJson()
                 authorize()
             }
-
+        }, onSuccess = {
             AuthState.onAuthStateChanged?.onSignOut()
-            onSuccess()
-        }, onFailure)
+            emit(SupabaseAuthSuccess)
+        })
     }
-
 
     suspend fun verifyMobileOTP(
         phone: String,
         token: String,
-        redirectTo: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+        redirectTo: String? = null
+    ) = flow {
         val url = "${authURL()}/verify"
 
         val map = hashMapOf("phone" to phone, token to token, "type" to "sms")
@@ -273,32 +240,26 @@ class SupabaseAuth {
             map["redirect_to"] = redirectTo
         }
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = Session(result)
-            val user = User(result["user"] as Map<String, Any?>)
-
+        }, onSuccess = {
+            val session = Session(it)
+            val user = User(it["user"] as Map<String, Any?>)
             Supabase.setAuth(session.access_token)
             AuthState.onAuthStateChanged?.onSignIn(user)
-            onSuccess(
-                session,
-                user
-            )
 
-        }, onFailure)
-
+            emit(Pair(session, user))
+        })
     }
-
 
     suspend fun resetPasswordForEmail(
         email: String,
         redirectTo: String? = null,
-        captchaToken: String? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: () -> Unit
-    ) {
+        captchaToken: String? = null
+    ) = flow {
         val url =
             "${authURL()}/recover${if (redirectTo != null) "?${redirectTo.encodeURLPath()}" else ""}"
 
@@ -307,77 +268,53 @@ class SupabaseAuth {
             "gotrue_meta_security" to mapOf("hcaptcha_token" to captchaToken)
         )
 
-        runCatching({
-            getClient().request<HttpResponse>(url, HttpMethod.Post, map) {
+
+        runCatching<HttpResponse>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            onSuccess()
-        }, onFailure)
-
+        }, onSuccess = {
+            emit(SupabaseAuthSuccess)
+        })
     }
 
-
-    /**
-     * Generates a new JWT with [refreshToken] and sets it as [Supabase.AUTHORIZATION] with function [Supabase.setAuth].
-     */
-    suspend fun refreshAccessToken(
-        refreshToken: String,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
-
+    suspend fun refreshAccessToken(refreshToken: String) = flow {
         val url = "${authURL()}/token?grant_type=refresh_token"
         val map = mapOf("refresh_token" to refreshToken)
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Post, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Post, map) {
                 applicationJson()
             }
-            val session = Session(result)
+        }, onSuccess = {
+            val session = Session(it)
+            val user = User(it["user"] as Map<String, Any?>)
             Supabase.setAuth(session.access_token)
-            onSuccess(
-                session,
-                User(result["user"] as Map<String, Any?>)
-            )
-        }, onFailure)
+            AuthState.onAuthStateChanged?.onSignIn(user)
 
+            emit(Pair(session, user))
+        })
     }
 
-    /**
-     * Gets the current [User] using the last JWT that have been set with the function [Supabase.setAuth].
-     */
-    suspend fun getUser(
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+    suspend fun getUser() = flow {
         val url = "${authURL()}/user"
 
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Get) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Get) {
                 authorize()
             }
-            onSuccess(
-                Session(result),
-                User(result["user"] as Map<String, Any?>)
-            )
-        }, onFailure)
-
+        }, onSuccess = {
+            emit(Pair(Session(it), User(it["user"] as Map<String, Any?>)))
+        })
     }
 
-    /**
-     * Updates current [User] using the last JWT that have been set with the function [Supabase.setAuth].
-     * [email], [phone], [password], [emailChangeToken], [data] arguments should be left as null if the
-     * update of the attribute isn't wanted.
-     */
     suspend fun updateUser(
         email: UpdatableUserAttributes.Email? = null,
         phone: UpdatableUserAttributes.Phone? = null,
         password: UpdatableUserAttributes.Password? = null,
         emailChangeToken: UpdatableUserAttributes.EmailChangeToken? = null,
-        data: UpdatableUserAttributes.Data? = null,
-        onFailure: (HttpStatusCode) -> Unit,
-        onSuccess: (session: Session, user: User) -> Unit
-    ) {
+        data: UpdatableUserAttributes.Data? = null
+    ) = flow {
         val url = "${authURL()}/user"
 
         val map = hashMapOf<String, Any?>()
@@ -397,19 +334,15 @@ class SupabaseAuth {
             map["data"] = data.value
         }
 
-
-        runCatching({
-            val result: Map<String, Any?> = getClient().request(url, HttpMethod.Put, map) {
+        runCatching<Map<String, Any?>>({
+            getClient().request(url, HttpMethod.Put, map) {
                 authorize()
                 applicationJson()
             }
-            onSuccess(
-                Session(result),
-                User(result["user"] as Map<String, Any?>)
-            )
-        }, onFailure)
+        }, onSuccess = {
+            emit(User(it["user"] as Map<String, Any?>))
+        })
     }
-
 
     fun setOnAuthStateChanged(onAuthStateChanged: OnAuthStateChanged) {
         AuthState.onAuthStateChanged = onAuthStateChanged

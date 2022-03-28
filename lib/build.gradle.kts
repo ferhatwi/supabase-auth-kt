@@ -25,7 +25,7 @@ publishing {
                 from(components["java"])
                 groupId = "io.github.ferhatwi"
                 artifactId = "supabase-auth-kt"
-                version = "0.1.0"
+                version = "0.1.1"
                 name.set("Supabase Auth")
                 description.set("Kotlin client for Supabase Auth")
                 url.set("http://www.github.com/ferhatwi/supabase-auth-kt")

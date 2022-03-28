@@ -2,6 +2,7 @@ package io.github.ferhatwi.supabase.auth
 
 import io.github.ferhatwi.supabase.Supabase
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.features.*
 import io.ktor.client.features.json.*
@@ -52,21 +53,22 @@ internal fun HeadersBuilder.applicationJson() {
     append(HttpHeaders.ContentType, "application/json")
 }
 
-internal suspend fun runCatching(block: suspend () -> Unit, onFailure: (HttpStatusCode) -> Unit) =
-    runCatching { block() }.getOrElse {
+internal suspend inline fun <reified T> runCatching(
+    block: () -> T,
+    onSuccess: (T) -> Unit
+) = runCatching { onSuccess(block()) }
+    .getOrElse {
         when (it) {
-            is ResponseException -> onFailure(it.response.status)
+            is ResponseException -> {
+                val map: Map<String, Any?> = it.response.receive()
+                val message = map["message"] as String?
+                val code = map["code"] as String?
+                val statusCode = it.response
+                throw SupabaseAuthException("$message $code, $statusCode")
+            }
             else -> throw it
         }
     }
-
-fun generateNonce(result: (nonce: String, encryptedNonce: String) -> Unit) {
-    val nonce = UUID.randomUUID().toString()
-    result(
-        nonce,
-        MessageDigest.getInstance("SHA-256").digest(nonce.toByteArray())
-            .fold("") { str, it -> str + "%02x".format(it) })
-}
 
 internal object Date {
     private fun ISO_8601(countOfMillis: Int) =
