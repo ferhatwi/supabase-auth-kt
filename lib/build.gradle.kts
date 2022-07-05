@@ -1,6 +1,6 @@
 plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    id("org.jetbrains.kotlin.jvm") version "1.6.10"
+    id("org.jetbrains.kotlin.jvm") version "1.7.0"
 
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
@@ -25,7 +25,7 @@ publishing {
                 from(components["java"])
                 groupId = "io.github.ferhatwi"
                 artifactId = "supabase-auth-kt"
-                version = "0.1.1"
+                version = "0.1.2"
                 name.set("Supabase Auth")
                 description.set("Kotlin client for Supabase Auth")
                 url.set("http://www.github.com/ferhatwi/supabase-auth-kt")
@@ -73,6 +73,6 @@ dependencies {
     // Use the Kotlin JDK 8 standard library.
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    api("io.github.ferhatwi:supabase-kt:0.2.0")
+    api("io.github.ferhatwi:supabase-kt:0.2.5")
 
 }

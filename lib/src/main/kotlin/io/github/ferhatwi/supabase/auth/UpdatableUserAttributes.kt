@@ -1,6 +1,5 @@
 package io.github.ferhatwi.supabase.auth
 
-
 class UpdatableUserAttributes {
     class Email(val value: String?)
     class Phone(val value: String?)

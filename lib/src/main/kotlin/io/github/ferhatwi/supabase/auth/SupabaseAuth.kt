@@ -1,14 +1,20 @@
 package io.github.ferhatwi.supabase.auth
 
 import io.github.ferhatwi.supabase.Supabase
-import io.ktor.client.statement.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
 import io.ktor.http.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import java.security.MessageDigest
+import java.time.OffsetDateTime
+import java.util.*
 import kotlin.collections.set
 
-object AuthState {
-    internal var onAuthStateChanged: OnAuthStateChanged? = null
-}
+var session: MutableStateFlow<Session?> = MutableStateFlow(null)
+    internal set
+
 
 class SupabaseAuth {
 
@@ -16,7 +22,7 @@ class SupabaseAuth {
         fun getInstance() = SupabaseAuth()
     }
 
-    suspend fun signUpWithEmail(
+    fun signUpWithEmail(
         email: String,
         password: String,
         redirectTo: String? = null,
@@ -30,31 +36,32 @@ class SupabaseAuth {
             "email" to email,
             "password" to password
         )
-        if (data != null) {
-            map["data"] = data
-        }
-        if (captchaToken != null) {
-            map["gotrue_meta_security"] = mapOf("captcha_token" to captchaToken)
-        }
+        if (data != null) map["data"] = data
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
-            }
-        }, onSuccess = {
-            val session = if (it.contains("access_token")) Session(it) else null
-            val user = User(it["user"] as Map<String, Any?>)
+        if (captchaToken != null) map["gotrue_meta_security"] =
+            mapOf("captcha_token" to captchaToken)
 
-            if (session != null) {
-                Supabase.setAuth(session.access_token)
-                AuthState.onAuthStateChanged?.onSignIn(user)
+
+
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
+            val session = (if (it.contains("access_token")) Session(user.id, it) else null).also {
+                session.value = it
+            }
+
+            if (session != null) Supabase.setAuth(session.accessToken)
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun signInWithEmail(
+    fun signInWithEmail(
         email: String,
         password: String,
         redirectTo: String? = null
@@ -64,21 +71,24 @@ class SupabaseAuth {
 
         val map = mapOf("email" to email, "password" to password)
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = Session(it)
-            val user = User(it["user"] as Map<String, Any?>)
-            Supabase.setAuth(session.access_token)
-            AuthState.onAuthStateChanged?.onSignIn(user)
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
+            val session = Session(user.id, it).also {
+                session.value = it
+                Supabase.setAuth(it.accessToken)
+            }
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun signUpWithPhone(
+    fun signUpWithPhone(
         phone: String,
         password: String,
         data: Map<String, Any?>? = null,
@@ -98,45 +108,53 @@ class SupabaseAuth {
         }
 
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = if (it.contains("access_token")) Session(it) else null
-            val user = User(it["user"] as Map<String, Any?>)
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
 
-            if (session != null) {
-                Supabase.setAuth(session.access_token)
-                AuthState.onAuthStateChanged?.onSignIn(user)
+            val session = (if (it.contains("access_token")) Session(user.id, it) else null).also {
+                session.value = it
             }
+
+            if (session != null) Supabase.setAuth(session.accessToken)
+
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun signInWithPhone(
+    fun signInWithPhone(
         phone: String,
         password: String,
     ) = flow {
         val url = "${authURL()}/token?grant_type=password"
         val map = mapOf("phone" to phone, "password" to password)
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = Session(it)
-            val user = User(it["user"] as Map<String, Any?>)
-            Supabase.setAuth(session.access_token)
-            AuthState.onAuthStateChanged?.onSignIn(user)
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
+
+            val session = Session(user.id, it).also {
+                session.value = it
+                Supabase.setAuth(it.accessToken)
+            }
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun signInWithThirdPartyProvider(
+
+    fun signInWithThirdPartyProvider(
         idToken: String,
         unencryptedNonce: String,
         clientKey: String,
@@ -151,24 +169,26 @@ class SupabaseAuth {
             "provider" to provider.toString()
         )
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = if (it.contains("access_token")) Session(it) else null
-            val user = User(it["user"] as Map<String, Any?>)
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
 
-            if (session != null) {
-                Supabase.setAuth(session.access_token)
-                AuthState.onAuthStateChanged?.onSignIn(user)
+            val session = (if (it.contains("access_token")) Session(user.id, it) else null).also {
+                session.value = it
             }
+
+            if (session != null) Supabase.setAuth(session.accessToken)
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun sendMagicLinkEmail(
+    fun sendMagicLinkEmail(
         email: String,
         shouldCreateUser: Boolean = true,
         redirectTo: String? = null,
@@ -183,16 +203,18 @@ class SupabaseAuth {
             "gotrue_meta_security" to mapOf("hcaptcha_token" to captchaToken)
         )
 
-        runCatching<HttpResponse>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
+            setBody(map)
+        }.also {
             emit(SupabaseAuthSuccess)
-        })
+        }
     }
 
-    suspend fun sendMobileOTP(
+    fun sendMobileOTP(
         phone: String,
         shouldCreateUser: Boolean = true,
         captchaToken: String? = null
@@ -205,30 +227,33 @@ class SupabaseAuth {
             "gotrue_meta_security" to mapOf("hcaptcha_token" to captchaToken)
         )
 
-        runCatching<HttpResponse>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
+            setBody(map)
+        }.also {
             emit(SupabaseAuthSuccess)
-        })
+        }
     }
 
-    suspend fun signOut() = flow {
+    fun signOut() = flow {
         val url = "${authURL()}/logout"
 
-        runCatching<HttpResponse>({
-            getClient().request(url, HttpMethod.Post, mapOf<String, Any?>()) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
                 authorize()
             }
-        }, onSuccess = {
-            AuthState.onAuthStateChanged?.onSignOut()
+        }.also {
+            Supabase.clearAuth()
             emit(SupabaseAuthSuccess)
-        })
+        }
     }
 
-    suspend fun verifyMobileOTP(
+    fun verifyMobileOTP(
         phone: String,
         token: String,
         redirectTo: String? = null
@@ -240,22 +265,25 @@ class SupabaseAuth {
             map["redirect_to"] = redirectTo
         }
 
-
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = Session(it)
-            val user = User(it["user"] as Map<String, Any?>)
-            Supabase.setAuth(session.access_token)
-            AuthState.onAuthStateChanged?.onSignIn(user)
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST") val user = User(it["user"] as Map<String, Any?>)
+
+            val session = Session(user.id, it).also {
+                session.value = it
+                Supabase.setAuth(it.accessToken)
+            }
 
             emit(Pair(session, user))
-        })
+        }
     }
 
-    suspend fun resetPasswordForEmail(
+    fun resetPasswordForEmail(
         email: String,
         redirectTo: String? = null,
         captchaToken: String? = null
@@ -269,46 +297,85 @@ class SupabaseAuth {
         )
 
 
-        runCatching<HttpResponse>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
+            setBody(map)
+        }.also {
             emit(SupabaseAuthSuccess)
-        })
+        }
     }
 
-    suspend fun refreshAccessToken(refreshToken: String) = flow {
+
+    fun refreshSession(currentSession: Session) = flow {
         val url = "${authURL()}/token?grant_type=refresh_token"
-        val map = mapOf("refresh_token" to refreshToken)
+        val map = mapOf("refresh_token" to currentSession.refreshToken)
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Post, map) {
-                applicationJson()
+        getClient().post(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
             }
-        }, onSuccess = {
-            val session = Session(it)
-            val user = User(it["user"] as Map<String, Any?>)
-            Supabase.setAuth(session.access_token)
-            AuthState.onAuthStateChanged?.onSignIn(user)
-
-            emit(Pair(session, user))
-        })
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            Session(currentSession.userID, it).also {
+                session.value = it
+                Supabase.setAuth(it.accessToken)
+                emit(it)
+            }
+        }
     }
 
-    suspend fun getUser() = flow {
+    fun autoRefreshSession() = flow {
+        session.value?.also {
+            emit(it)
+
+            (it
+                .acquiredAt
+                .plusSeconds((it.expiresIn - 10).toLong())
+                .toInstant()
+                .toEpochMilli()
+                    -
+                    OffsetDateTime.now()
+                        .toInstant()
+                        .toEpochMilli())
+                .let {
+                    if (it > 0) {
+                        delay(it)
+                    }
+                }
+
+            suspend fun repeating() {
+                delay((it.expiresIn.toLong() - 10) * 1000)
+                session.value?.also {
+                    refreshSession(it).collect {
+                        emit(it)
+                        repeating()
+                    }
+                } ?: throw SupabaseAuthException.NoActiveSession("NoActiveSession")
+            }
+            repeating()
+
+        } ?: throw SupabaseAuthException.NoActiveSession("NoActiveSession")
+    }
+
+    fun getUser() = flow {
         val url = "${authURL()}/user"
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Get) {
+        getClient().get(url) {
+            headers {
+                apiKey()
                 authorize()
             }
-        }, onSuccess = {
-            emit(Pair(Session(it), User(it["user"] as Map<String, Any?>)))
-        })
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST")
+            emit(User(it["user"] as Map<String, Any?>))
+        }
     }
 
-    suspend fun updateUser(
+    fun updateUser(
         email: UpdatableUserAttributes.Email? = null,
         phone: UpdatableUserAttributes.Phone? = null,
         password: UpdatableUserAttributes.Password? = null,
@@ -334,18 +401,28 @@ class SupabaseAuth {
             map["data"] = data.value
         }
 
-        runCatching<Map<String, Any?>>({
-            getClient().request(url, HttpMethod.Put, map) {
+
+        getClient().put(url) {
+            contentType(ContentType.Application.Json)
+            headers {
+                apiKey()
                 authorize()
-                applicationJson()
             }
-        }, onSuccess = {
+            setBody(map)
+        }.body<Map<String, Any?>>().also {
+            @Suppress("UNCHECKED_CAST")
             emit(User(it["user"] as Map<String, Any?>))
-        })
+        }
     }
 
-    fun setOnAuthStateChanged(onAuthStateChanged: OnAuthStateChanged) {
-        AuthState.onAuthStateChanged = onAuthStateChanged
+    fun generateNonce() = UUID.randomUUID().toString().let {
+        Nonce(it, MessageDigest.getInstance("SHA-256").digest(it.toByteArray())
+            .fold("") { str, byte -> str + "%02x".format(byte) })
+    }
+
+    fun setSession(value: Session) {
+        session.value = value
+        Supabase.setAuth(value.accessToken)
     }
 
 }

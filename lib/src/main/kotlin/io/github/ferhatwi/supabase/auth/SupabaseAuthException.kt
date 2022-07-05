@@ -1,3 +1,5 @@
 package io.github.ferhatwi.supabase.auth
 
-class SupabaseAuthException internal constructor(message : String) : Throwable(message)
+sealed class SupabaseAuthException(override val message: String) : Throwable(message) {
+    data class NoActiveSession(override val message: String) : SupabaseAuthException(message)
+}

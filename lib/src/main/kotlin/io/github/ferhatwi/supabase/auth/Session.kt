@@ -1,12 +1,18 @@
 package io.github.ferhatwi.supabase.auth
 
-data class Session internal constructor(
-    val access_token: String,
-    val token_type: String,
+import java.time.OffsetDateTime
+
+data class Session(
+    val userID: String,
+    val acquiredAt: OffsetDateTime,
+    val accessToken: String,
+    val tokenType: String,
     val expiresIn: Double,
     val refreshToken: String
 ) {
-    internal constructor(map: Map<String, Any?>) : this(
+    internal constructor(userID: String, map: Map<String, Any?>) : this(
+        userID,
+        OffsetDateTime.now(),
         map["access_token"] as String,
         map["token_type"] as String,
         map["expires_in"] as Double,
